@@ -1,103 +1,147 @@
-import Image from "next/image";
+"use client";
+
+import CardTemplate from "@/components/CardTemplate";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
+import { useState } from "react";
+import { Toaster, toast } from "sonner";
+
+// Define the structure for a card
+interface CardData {
+  text: string;
+}
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [inputText, setInputText] = useState<string>("");
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [cards, setCards] = useState<CardData[]>([]);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
+  const handleGenerateClick = async () => {
+    if (!inputText.trim()) {
+      toast.error("请输入一些文本内容。");
+      return; // Prevent API call if input is empty
+    }
+
+    setIsLoading(true);
+    setError(null);
+    setCards([]); // Clear previous results
+
+    try {
+      console.log("Calling API /api/generate with text:", inputText);
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: inputText }),
+      });
+
+      // Check if the response is ok (status code 200-299)
+      if (!response.ok) {
+        let errorMsg = "生成卡片时出错";
+        try {
+          // Try to parse the error response from the backend
+          const errorData = await response.json();
+          errorMsg = errorData.message || `服务器错误 ${response.status}`;
+        } catch {
+          // If parsing fails, use the status text (no need for the error object here)
+          errorMsg = `服务器错误 ${response.status}: ${response.statusText}`;
+        }
+        throw new Error(errorMsg);
+      }
+
+      // Parse the successful JSON response
+      const data = await response.json();
+
+      // Validate the response structure
+      if (data.cards && Array.isArray(data.cards)) {
+        setCards(data.cards);
+        toast.success("卡片生成成功！");
+      } else {
+        // This case should ideally be caught by the backend validation,
+        // but good to have a fallback here.
+        console.error("API returned invalid data format:", data);
+        throw new Error("API 返回了无效的数据格式");
+      }
+    } catch (err) {
+      // Let TypeScript infer type as unknown
+      console.error("API Call Error:", err);
+      let message = "发生未知网络错误，请检查网络连接或稍后重试";
+      if (err instanceof Error) {
+        message = err.message; // Use message from Error object if available
+      }
+      // Optionally handle other error types here if needed
+      setError(message);
+      toast.error(message); // Show error toast
+    } finally {
+      setIsLoading(false); // Always set loading to false when done
+    }
+  };
+
+  return (
+    <div className="container mx-auto py-10 px-4 flex flex-col items-center gap-8 min-h-screen">
+      <Toaster richColors position="top-center" />
+      <h1 className="text-3xl font-bold text-center">一念成卡 ✨</h1>
+      <p className="text-muted-foreground text-center">
+        输入你的想法、文案或笔记，快速生成精美卡片。
+      </p>
+
+      <div className="w-full max-w-xl flex flex-col gap-4">
+        <Textarea
+          placeholder="在这里输入你的想法、文案或笔记..."
+          value={inputText}
+          onChange={(e) => setInputText(e.target.value)}
+          rows={6}
+          className="resize-none"
+          disabled={isLoading}
+        />
+        <Button
+          onClick={handleGenerateClick}
+          disabled={isLoading || !inputText.trim()}
+          size="lg"
         >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+          {isLoading ? "正在生成中..." : "生成卡片"}
+        </Button>
+      </div>
+
+      <div className="w-full max-w-4xl mt-8">
+        {isLoading && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[...Array(3)].map((_, i) => (
+              <Card key={i}>
+                <CardContent className="p-6">
+                  <Skeleton className="h-4 w-3/4 mb-2" />
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-5/6 mt-2" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+
+        {error && !isLoading && (
+          <Alert variant="destructive" className="max-w-xl mx-auto">
+            <AlertTitle>错误</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        {!isLoading && !error && cards.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {cards.map((card, index) => (
+              <CardTemplate key={index} id={`card-${index}`} text={card.text} />
+            ))}
+          </div>
+        )}
+
+        {!isLoading && !error && cards.length === 0 && (
+          <p className="text-center text-muted-foreground">
+            点击&ldquo;生成卡片&rdquo;按钮开始创建。
+          </p>
+        )}
+      </div>
     </div>
   );
 }
